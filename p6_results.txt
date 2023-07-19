@@ -1,0 +1,9 @@
+Portfolio	STD	Cummulative Rets	Average Rets
+benchmark	0.01700436627121376	0.012299999999999978	0.00016808697819094233
+TOS portfolio	0.004547823197908002	5.7861	0.0038167861508578214
+Portfolio	STD	Cummulative Rets	Average Rets
+benchmark	0.017004	0.0123	0.000168
+TOS portfolio	0.004548	5.7861	0.003817
+Portfolio	STD	Cummulative Rets	Average Rets
+benchmark	0.052145	1.031973	0.001396
+TOS portfolio	0.004548	6.7861	0.003817

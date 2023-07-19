@@ -86,6 +86,7 @@ def indexGen(size):
 def gamble(num_of_episodes, min_winning=80, rate=.5, num_of_runs=1000, max_lose=-1000000000):
     res = np.full((num_of_runs+1, num_of_episodes), max_lose)
     res[0, :] = 0
+    count = 0
     for i in range(num_of_episodes):
         bet_amount = 1
         won = False
@@ -95,6 +96,7 @@ def gamble(num_of_episodes, min_winning=80, rate=.5, num_of_runs=1000, max_lose=
                 break
             if res[run-1, i] >= min_winning:
                 res[run:, i] = min_winning
+                count += run
                 break
             won = get_spin_result(rate)
             if won == True:
@@ -112,11 +114,12 @@ def gamble(num_of_episodes, min_winning=80, rate=.5, num_of_runs=1000, max_lose=
     df['median'] = df.median(axis=1)
     df['median+std'] = df['median'] + df['std']
     df['median-std'] = df['median'] - df['std']
+    print(count/1000)
     return df
 
 # 3.2 Experiment 1 – Explore the strategy and create some charts
 
-df = gamble(1000, max_lose=-1000000000000, rate=18./38)
+df = gamble(10000, max_lose=-1000000000000, rate=18./38)
 x_bounds = [0, 300]
 y_bounds = [-256, 100]
 ax = df.iloc[:, 0:10].plot()
@@ -144,7 +147,7 @@ ax.set_xlim([x_bounds[0], x_bounds[1]])
 ax.set_ylim([y_bounds[0], y_bounds[1]])
 plt.savefig("Exp1_Fig3")
 
-# 3.3 Experiment 2 – A more realistic gambling simulator  
+# 3.3 Experiment 2 – A more realistic gambling simulator
 
 df_256 = gamble(1000, max_lose=-256, rate=18./38)
 
