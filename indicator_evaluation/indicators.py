@@ -69,7 +69,7 @@ def plots(symbol, sd, ed):
     SMA(prices, symbol, 50)
     BollingerBands(prices, symbol)
     RSI(prices, symbol)
-    StochasticOscillator(prices, symbol)
+    StochasticOscillator(prices, symbol, 14, 3, 3)
     VPT(prices, symbol)
     # golden cross
     fig, ax = plt.subplots(figsize=(10, 6))
@@ -137,7 +137,7 @@ def plots(symbol, sd, ed):
     fig.suptitle('Stochastic Oscillator')
     plt.legend(['K%', 'D%', 'Overbought', 'Oversold'],
                loc='upper right', bbox_to_anchor=(1., .75))
-    plt.savefig("./so.eps", format='eps')
+    plt.savefig("./so.png", format='png')
     
     #VPT
     fig, (ax1, ax2) = plt.subplots(2, figsize=(10, 6))

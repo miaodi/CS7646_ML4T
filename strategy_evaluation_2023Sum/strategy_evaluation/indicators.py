@@ -5,6 +5,7 @@ import pandas as pd
 from util import get_data, plot_data
 import matplotlib.pyplot as plt
 
+
 def author():
     """  		  	   		  		 			  		 			 	 	 		 		 	
     :return: The GT username of the student  		  	   		  		 			  		 			 	 	 		 		 	
@@ -12,19 +13,19 @@ def author():
     """
     return "dmiao3"  # replace tb34 with your Georgia Tech username
 
+
 def SMA(prices, symbol, window=20):
-    prices['SMA-'+str(window)] = prices[symbol].rolling(window).mean()
+    name = 'SMA-'+str(window)
+    prices[name] = prices[symbol].rolling(window).mean()
+    return name
 
 
 def BollingerBands(prices, symbol, window=20, m=2):
-    SMA(prices, symbol, window)
+    name = SMA(prices, symbol, window)
     std = prices[symbol].rolling(window).std()
     prices['BOLU-'+str(window)] = prices['SMA-'+str(window)]+m*std
     prices['BOLD-'+str(window)] = prices['SMA-'+str(window)]-m*std
-    prices['SMA-'+str(window)] = prices[symbol].rolling(window).mean()
-    prices['BB'] = ((prices[symbol]-prices['SMA-'+str(window)])/(m*std))*100
-    prices["-100"] = -100
-    prices["100"] = 100
+    return [name, 'BOLD-'+str(window), 'BOLU-'+str(window)]
 
 
 def RSI(prices, symbol, window=14):
@@ -35,9 +36,7 @@ def RSI(prices, symbol, window=14):
     diffDown[diffDown > 0] = 0
     prices['RSI-'+str(window)] = 100-100 / \
         (1+diffUp.rolling(window).mean()/abs(diffDown.rolling(window).mean()))
-
-    prices["Overbought"] = 70
-    prices["Oversold"] = 30
+    return 'RSI-'+str(window)
 
 
 def StochasticOscillator(prices, symbol, window=21, K=14, D=14):
@@ -46,8 +45,8 @@ def StochasticOscillator(prices, symbol, window=21, K=14, D=14):
     prices['SO'] = (prices[symbol]-Low)/(High-Low)*100
     prices['K%'] = prices['SO'].rolling(K).mean()
     prices['D%'] = prices['K%'].rolling(D).mean()
-    prices["80"] = 80
-    prices["20"] = 20
+    return ['K%', 'D%']
+
 
 def VPT(prices, symbol, window=7, window2=14):
     returns = prices[symbol].pct_change().fillna(0)
@@ -55,6 +54,7 @@ def VPT(prices, symbol, window=7, window2=14):
     prices['VPT'] = vp.cumsum()
     prices['VPT-SMA-' + str(window)] = prices['VPT'].rolling(window).mean()
     prices['VPT-SMA-' + str(window2)] = prices['VPT'].rolling(window2).mean()
+
 
 def plots(symbol, sd, ed):
     dates = pd.date_range(sd - 100*pd.Timedelta(days=1), ed)
@@ -138,8 +138,8 @@ def plots(symbol, sd, ed):
     plt.legend(['K%', 'D%', 'Overbought', 'Oversold'],
                loc='upper right', bbox_to_anchor=(1., .75))
     plt.savefig("./so.eps", format='eps')
-    
-    #VPT
+
+    # VPT
     fig, (ax1, ax2) = plt.subplots(2, figsize=(10, 6))
     prices[symbol].plot(ax=ax1)
     prices['VPT'].plot(ax=ax2)
@@ -153,5 +153,3 @@ def plots(symbol, sd, ed):
     ax2.set_xlim([sd, ed])
     fig.suptitle('Volume Price Trend')
     plt.savefig("./vpt.eps", format='eps')
-
-
