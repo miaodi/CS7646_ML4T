@@ -116,8 +116,8 @@ class QLearner(object):
 
         self.qvalue[self.s][self.a] = (
             1-self.alpha)*self.qvalue[self.s][self.a]+self.alpha*(r+self.gamma*np.max(self.qvalue[s_prime]))
-
-        self.history.append([self.s, self.a, r, s_prime])
+        if self.dyna:
+            self.history.append([self.s, self.a, r, s_prime])
 
         self.rar *= self.radr
         self.s = s_prime

@@ -37,6 +37,7 @@ import util as ut
 import indicators
 import numpy as np
 import QLearner
+import matplotlib.pyplot as plt
 class StrategyLearner(object):
     """  		  	   		  		 			  		 			 	 	 		 		 	
     A strategy learner that can learn a trading policy using the same indicators used in ManualStrategy.  		  	   		  		 			  		 			 	 	 		 		 	
@@ -70,9 +71,11 @@ class StrategyLearner(object):
         self.SO_K = 3
         self.SO_D = 3
         self.bins = {}
+        self.catagories = {}
         self.signals = []
 
-        self.discretize_size = 10
+        self.discretize_size = 5
+        self.stock_limit = 1000
 
     def setBB(self, window, m):
         self.BB_window = int(window)
@@ -139,10 +142,46 @@ class StrategyLearner(object):
         for i in self.signals:
             self.multiplier = np.append(self.multiplier,
                                         self.multiplier[-1]*(len(self.bins[i])-1))
-        print(self.multiplier)
+
         # default Qlearner
-        self.Q = QLearner.QLearner(num_stats=self.NumOfStates(), num_actions=3)
-        
+        # action 0: sell | 1: hold | 2: buy
+        self.Q = QLearner.QLearner(
+            num_states=self.NumOfStates()*self.NumOfStates(), num_actions=3)
+
+        catagoriesMatrix = np.array([self.catagories[i] for i in self.signals])
+        # print(catagoriesMatrix[:,0])
+
+        for i in range(0, 50):
+            action = 0
+            r = 0
+            cur = sv
+            stock = 0
+            prev_state = 0
+            res = pd.DataFrame(np.zeros(
+                shape=(self.prices.shape[0], 1)), index=self.prices.index, columns={'value'})
+            for day in range(0, len(self.prices)):
+                stock_price = self.prices.iloc[day][self.tickName]
+                state = self.State(catagoriesMatrix[:, day])
+                trueState = state+prev_state*self.NumOfStates()
+                if day == 0:
+                    action = self.Q.querysetstate(trueState)
+                else:
+                    r = cur+stock*stock_price-res.iloc[day-1][0]
+                    action = self.Q.query(trueState, r)
+                prev_state = state
+                if action == 1:
+                    res.iloc[day][0] = cur + stock * stock_price
+                    continue
+                if action == 2:
+                    adjusted_stock_price = stock_price*(1+self.impact)
+                    target = self.stock_limit
+                elif action == 0:
+                    adjusted_stock_price = stock_price*(1-self.impact)
+                    target = -self.stock_limit
+                if target != stock:
+                    cur += -adjusted_stock_price*(target-stock)-self.commission
+                    stock = target
+                res.iloc[day][0] = cur+stock*stock_price
 
     def State(self, cuts):
         return np.inner(self.multiplier[:-1], cuts)
@@ -150,11 +189,15 @@ class StrategyLearner(object):
     def NumOfStates(self):
         return self.multiplier[-1]
 
-    def CreateBin(self, signal):
-        _, self.bins[signal] = pd.cut(
-            self.prices[signal], self.discretize_size, labels=False, retbins=True)
-        self.bins[signal][0] = -np.inf
-        self.bins[signal][-1] = np.inf
+    def CreateBin(self, signal, createBin=True):
+        if createBin == True:
+            self.catagories[signal], self.bins[signal] = pd.cut(
+                self.prices[signal], self.discretize_size, labels=False, retbins=True)
+            self.bins[signal][0] = -np.inf
+            self.bins[signal][-1] = np.inf
+        else:
+            self.catagories[signal] = pd.cut(
+                self.prices[signal], self.bins[signal], labels=False)
 
     def SMASignal(self, fast=10, slow=30):
         fastName = indicators.SMA(self.prices, self.tickName, fast)
@@ -222,30 +265,76 @@ class StrategyLearner(object):
 
         # here we build a fake set of trades
         # your code should return the same sort of data
-        dates = pd.date_range(sd, ed)
-        prices_all = ut.get_data([symbol], dates)  # automatically adds SPY
-        trades = prices_all[[symbol, ]]  # only portfolio symbols
-        trades_SPY = prices_all["SPY"]  # only SPY, for comparison later
-        trades.values[:, :] = 0  # set them all to nothing
-        trades.values[0, :] = 1000  # add a BUY at the start
-        trades.values[40, :] = -1000  # add a SELL
-        trades.values[41, :] = 1000  # add a BUY
-        trades.values[60, :] = -2000  # go short from long
-        trades.values[61, :] = 2000  # go long from short
-        trades.values[-1, :] = -1000  # exit on the last day
-        if self.verbose:
-            print(type(trades))  # it better be a DataFrame!
-        if self.verbose:
-            print(trades)
-        if self.verbose:
-            print(prices_all)
-        return trades
+        self.start = sd
+        self.end = ed
+        self.tickName = symbol
+        dates = pd.date_range(self.start - 80*pd.Timedelta(days=1), self.end)
+        self.prices = ut.get_data([self.tickName], dates, colname="Adj Close").drop(
+            columns=["SPY"])
+
+        self.SMASignal(self.SMA_fast, self.SMA_slow)
+        self.BollingerBandsSignal(self.BB_window, self.BB_m)
+        self.RSISignal(self.RSI_window, self.RSI_limit)
+        self.StochasticOscillatorSignal(self.SO_window, self.SO_K, self.SO_D)
+
+        self.prices = self.prices[self.start:self.end]
+        for i in self.signals:
+            self.CreateBin(i, createBin=False)
+
+        catagoriesMatrix = np.array([self.catagories[i] for i in self.signals])
+        # print(catagoriesMatrix[:,0])
+
+        action = 0
+        r = 0
+        cur = sv
+        stock = 0
+        prev_state = 0
+        res = pd.DataFrame(np.zeros(
+            shape=(self.prices.shape[0], 1)), index=self.prices.index, columns={'value'})
+        for day in range(0, len(self.prices)):
+            stock_price = self.prices.iloc[day][self.tickName]
+            state = self.State(catagoriesMatrix[:, day])
+            trueState = state + prev_state * self.NumOfStates()
+            action = self.Q.querysetstate(trueState)
+            prev_state = state
+            if action == 1:
+                res.iloc[day][0] = cur + stock * stock_price
+                continue
+            if action == 2:
+                adjusted_stock_price = stock_price*(1+self.impact)
+                target = self.stock_limit
+            elif action == 0:
+                adjusted_stock_price = stock_price*(1-self.impact)
+                target = -self.stock_limit
+            if target != stock:
+                cur += -adjusted_stock_price*(target-stock)-self.commission
+                stock = target
+            res.iloc[day][0] = cur+stock*stock_price
+        return res
 
 
 if __name__ == "__main__":
     print("One does not simply think up a strategy")
 
 sl = StrategyLearner()
-sl.add_evidence('JPM', dt.datetime(2008, 1, 1), dt.datetime(2009, 12, 31))
-# print(sl.prices)
-print(sl.bins)
+sl.setSMA(10, 34)
+sl.setRSI(13, 19)
+sl.setSO(20, 6, 1)
+sl.setBB(16, 1.47924663)
+sl.add_evidence('JPM', dt.datetime(2008, 1, 1),
+                dt.datetime(2009, 12, 31), 100000)
+res = sl.testPolicy('JPM', dt.datetime(2010, 1, 1),
+                dt.datetime(2011, 12, 31), 100000)
+print(res.tail(1).values[0][0])
+prices = sl.prices
+fig, (ax1, ax2) = plt.subplots(2, figsize=(10, 6))
+prices[sl.tickName].plot(ax=ax1)
+# prices['SO'].plot(ax=ax1)
+# prices['K%'].plot(ax=ax1)
+# prices['D%'].plot(ax=ax1)
+# signresal.plot(ax=ax1)
+res.plot(ax=ax2)
+ax1.set_xticks([])
+ax2.set_xlim([sl.start, sl.end])
+ax2.set_xlim([sl.start, sl.end])
+plt.show()
