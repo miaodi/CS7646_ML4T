@@ -161,8 +161,18 @@ def BenchMark(
                            addSPY=True, colname="Adj Close").drop(columns="SPY")
     rest = sv-prices.iloc[0][symbol]
     benchmark = prices[symbol]+rest
-    benchmark = prices[symbol] / prices.iloc[0][symbol]
-    return benchmark
+    benchmark = benchmark / benchmark.iloc[0]
+    res = pd.DataFrame(benchmark.values, index=prices.index, columns={'value'})
+    return res
+
+
+def Metric(prices):
+    # ------------- Tables ------------- #
+    daily_return = prices.pct_change().dropna()
+    std = round(daily_return['value'].std(), 6)
+    cum = round(prices.iloc[-1]['value']-1, 6)
+    avg = round(daily_return['value'].mean(), 6)
+    return cum, std, avg
 
 
 def optimize():
@@ -194,12 +204,11 @@ def optimize():
     benchMark.plot(ax=ax1, color='purple')
     defaultRes.plot(ax=ax1, color='green')
     optRes.plot(ax=ax1, color='red')
-    fig.suptitle('SMA indicator')
+    fig.suptitle('Golden Cross indicator')
     plt.legend(['Benchmark', 'Default', 'Optimized'], loc='upper left')
     ax1.set_xlabel("Date")
     ax1.set_ylabel("Normalized value")
-    plt.savefig(
-        "./strategy_evaluation_2023Sum/strategy_evaluation/plots/SMA_opt.eps", format='eps')
+    plt.savefig(os.path.dirname(__file__)+"/plots/SMA_opt.eps", format='eps')
 
     # optimize BB
     ms.setWeights([0, 1, 0, 0])
@@ -223,8 +232,7 @@ def optimize():
     plt.legend(['Benchmark', 'Default', 'Optimized'], loc='upper left')
     ax1.set_xlabel("Date")
     ax1.set_ylabel("Normalized value")
-    plt.savefig(
-        "./strategy_evaluation_2023Sum/strategy_evaluation/plots/BB_opt.eps", format='eps')
+    plt.savefig(os.path.dirname(__file__)+"/plots/BB_opt.eps", format='eps')
 
     # optimize RSI
     ms.setWeights([0, 0, 1, 0])
@@ -248,8 +256,7 @@ def optimize():
     plt.legend(['Benchmark', 'Default', 'Optimized'], loc='upper left')
     ax1.set_xlabel("Date")
     ax1.set_ylabel("Normalized value")
-    plt.savefig(
-        "./strategy_evaluation_2023Sum/strategy_evaluation/plots/RSI.eps", format='eps')
+    plt.savefig(os.path.dirname(__file__)+"/plots/RSI.eps", format='eps')
 
     # optimize SO
     ms.setWeights([0, 0, 0, 1])
@@ -273,8 +280,7 @@ def optimize():
     plt.legend(['Benchmark', 'Default', 'Optimized'], loc='upper left')
     ax1.set_xlabel("Date")
     ax1.set_ylabel("Normalized value")
-    plt.savefig(
-        "./strategy_evaluation_2023Sum/strategy_evaluation/plots/SO.eps", format='eps')
+    plt.savefig(os.path.dirname(__file__)+"/plots/SO.eps", format='eps')
 
     # optimize weights
     ms.setSMA(10, 34)
@@ -301,8 +307,7 @@ def optimize():
     plt.legend(['Benchmark', 'Default', 'Optimized'], loc='upper left')
     ax1.set_xlabel("Date")
     ax1.set_ylabel("Normalized value")
-    plt.savefig(
-        "./strategy_evaluation_2023Sum/strategy_evaluation/plots/Weight.eps", format='eps')
+    plt.savefig(os.path.dirname(__file__)+"/plots/Weight.eps", format='eps')
 
 
 def InSample(
@@ -340,8 +345,10 @@ def InSample(
     ax1.legend(['Benchmark', 'Manual Strategy'], loc='upper left')
     ax1.set_xlabel("Date")
     ax1.set_ylabel("Normalized value")
-    plt.savefig(
-        "./strategy_evaluation_2023Sum/strategy_evaluation/plots/"+filename, format='eps')
+    plt.savefig(os.path.dirname(__file__)+"/plots/"+filename, format='eps')
+
+    print("Benchmark: {}".format(Metric(benchMark)))
+    print("ManualStrategy: {}".format(Metric(optRes)))
 
 
 def OutOfSample():
