@@ -74,7 +74,7 @@ class StrategyLearner(object):
         self.catagories = {}
         self.signals = []
 
-        self.discretize_size = 5
+        self.discretize_size = 3
         self.stock_limit = 1000
 
     def setBB(self, window, m):
@@ -151,7 +151,7 @@ class StrategyLearner(object):
         catagoriesMatrix = np.array([self.catagories[i] for i in self.signals])
         # print(catagoriesMatrix[:,0])
 
-        for i in range(0, 50):
+        for i in range(0, 100):
             action = 0
             r = 0
             cur = sv
