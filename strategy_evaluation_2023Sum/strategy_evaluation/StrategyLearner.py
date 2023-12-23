@@ -38,6 +38,8 @@ import indicators
 import numpy as np
 import QLearner
 import matplotlib.pyplot as plt
+import ManualStrategy
+import os
 class StrategyLearner(object):
     """  		  	   		  		 			  		 			 	 	 		 		 	
     A strategy learner that can learn a trading policy using the same indicators used in ManualStrategy.  		  	   		  		 			  		 			 	 	 		 		 	
@@ -74,8 +76,16 @@ class StrategyLearner(object):
         self.catagories = {}
         self.signals = []
 
-        self.discretize_size = 5
+        self.discretize_size = 4
         self.stock_limit = 1000
+
+        self.setSMA(10, 34)
+        self.setRSI(13, 19)
+        self.setSO(20, 6, 1)
+        self.setBB(16, 1.47924663)
+
+    def author(self):
+        return ('dmiao3')
 
     def setBB(self, window, m):
         self.BB_window = int(window)
@@ -146,31 +156,30 @@ class StrategyLearner(object):
         # default Qlearner
         # action 0: sell | 1: hold | 2: buy
         self.Q = QLearner.QLearner(
-            num_states=self.NumOfStates()*self.NumOfStates(), num_actions=3)
+            num_states=self.NumOfStates(), num_actions=3)
 
         catagoriesMatrix = np.array([self.catagories[i] for i in self.signals])
         # print(catagoriesMatrix[:,0])
 
-        for i in range(0, 50):
+        res = np.zeros(self.prices.shape[0])
+        res[0] = sv
+        for i in range(0, 200):
+            res[0] = sv
             action = 0
             r = 0
             cur = sv
             stock = 0
-            prev_state = 0
-            res = pd.DataFrame(np.zeros(
-                shape=(self.prices.shape[0], 1)), index=self.prices.index, columns={'value'})
             for day in range(0, len(self.prices)):
                 stock_price = self.prices.iloc[day][self.tickName]
                 state = self.State(catagoriesMatrix[:, day])
-                trueState = state+prev_state*self.NumOfStates()
+                trueState = state
                 if day == 0:
                     action = self.Q.querysetstate(trueState)
                 else:
-                    r = cur+stock*stock_price-res.iloc[day-1][0]
+                    r = cur+stock*stock_price-res[day-1]
                     action = self.Q.query(trueState, r)
-                prev_state = state
                 if action == 1:
-                    res.iloc[day][0] = cur + stock * stock_price
+                    res[day] = cur + stock * stock_price
                     continue
                 if action == 2:
                     adjusted_stock_price = stock_price*(1+self.impact)
@@ -181,7 +190,7 @@ class StrategyLearner(object):
                 if target != stock:
                     cur += -adjusted_stock_price*(target-stock)-self.commission
                     stock = target
-                res.iloc[day][0] = cur+stock*stock_price
+                res[day] = cur+stock*stock_price
 
     def State(self, cuts):
         return np.inner(self.multiplier[:-1], cuts)
@@ -191,7 +200,7 @@ class StrategyLearner(object):
 
     def CreateBin(self, signal, createBin=True):
         if createBin == True:
-            self.catagories[signal], self.bins[signal] = pd.cut(
+            self.catagories[signal], self.bins[signal] = pd.qcut(
                 self.prices[signal], self.discretize_size, labels=False, retbins=True)
             self.bins[signal][0] = -np.inf
             self.bins[signal][-1] = np.inf
@@ -268,6 +277,7 @@ class StrategyLearner(object):
         self.start = sd
         self.end = ed
         self.tickName = symbol
+        self.start_val = sv
         dates = pd.date_range(self.start - 80*pd.Timedelta(days=1), self.end)
         self.prices = ut.get_data([self.tickName], dates, colname="Adj Close").drop(
             columns=["SPY"])
@@ -285,56 +295,113 @@ class StrategyLearner(object):
         # print(catagoriesMatrix[:,0])
 
         action = 0
-        r = 0
         cur = sv
         stock = 0
-        prev_state = 0
-        res = pd.DataFrame(np.zeros(
-            shape=(self.prices.shape[0], 1)), index=self.prices.index, columns={'value'})
+        self.signal = pd.DataFrame(data=np.zeros(
+            shape=(self.prices.shape[0], 1)), index=self.prices.index, columns={'signal'})
         for day in range(0, len(self.prices)):
             stock_price = self.prices.iloc[day][self.tickName]
-            state = self.State(catagoriesMatrix[:, day])
-            trueState = state + prev_state * self.NumOfStates()
-            action = self.Q.querysetstate(trueState)
-            prev_state = state
+            action = self.Q.querysetstate(self.State(catagoriesMatrix[:, day]))
             if action == 1:
-                res.iloc[day][0] = cur + stock * stock_price
                 continue
             if action == 2:
-                adjusted_stock_price = stock_price*(1+self.impact)
-                target = self.stock_limit
+                self.signal.iloc[day][0] = 1
             elif action == 0:
+                self.signal.iloc[day][0] = -1
+            else:
+                self.signal.iloc[day][0] = 0
+
+        self.action = pd.DataFrame(data=np.zeros(
+            shape=(self.prices.shape[0], 1)), index=self.prices.index, columns={'action'})
+        prev = 0
+        for i in range(0, len(self.signal)):
+            if self.signal.iloc[i][0] == 1:
+                self.action.iloc[i][0] = self.stock_limit-prev
+                prev = self.stock_limit
+            elif self.signal.iloc[i][0] == -1:
+                self.action.iloc[i][0] = -self.stock_limit-prev
+                prev = -self.stock_limit
+
+        return self.action
+
+    def portValue(self):
+        stock = 0
+        start_val = self.start_val
+        res = pd.DataFrame(np.zeros(
+            shape=(self.prices.shape[0], 1)), index=self.prices.index, columns={'value'})
+        for i in range(0, len(self.prices)):
+            stock_price = self.prices.iloc[i][self.tickName]
+            if self.signal.iloc[i][0] == 0:
+                res.iloc[i][0] = start_val + stock * stock_price
+                continue
+            if self.signal.iloc[i][0] == 1:
+                adjusted_stock_price = stock_price*(1+self.impact)
+            elif self.signal.iloc[i][0] == -1:
                 adjusted_stock_price = stock_price*(1-self.impact)
-                target = -self.stock_limit
-            if target != stock:
-                cur += -adjusted_stock_price*(target-stock)-self.commission
-                stock = target
-            res.iloc[day][0] = cur+stock*stock_price
+            if self.action.iloc[i][0] != 0:
+                start_val += -adjusted_stock_price * \
+                    self.action.iloc[i][0]-self.commission
+                stock = stock + self.action.iloc[i][0]
+            res.iloc[i][0] = start_val+stock*stock_price
+        res = res/(res.iloc[0])
         return res
 
 
 if __name__ == "__main__":
     print("One does not simply think up a strategy")
 
-sl = StrategyLearner()
-sl.setSMA(10, 34)
-sl.setRSI(13, 19)
-sl.setSO(20, 6, 1)
-sl.setBB(16, 1.47924663)
-sl.add_evidence('JPM', dt.datetime(2008, 1, 1),
-                dt.datetime(2009, 12, 31), 100000)
-res = sl.testPolicy('JPM', dt.datetime(2010, 1, 1),
-                dt.datetime(2011, 12, 31), 100000)
-print(res.tail(1).values[0][0])
-prices = sl.prices
-fig, (ax1, ax2) = plt.subplots(2, figsize=(10, 6))
-prices[sl.tickName].plot(ax=ax1)
-# prices['SO'].plot(ax=ax1)
-# prices['K%'].plot(ax=ax1)
-# prices['D%'].plot(ax=ax1)
-# signresal.plot(ax=ax1)
-res.plot(ax=ax2)
-ax1.set_xticks([])
-ax2.set_xlim([sl.start, sl.end])
-ax2.set_xlim([sl.start, sl.end])
-plt.show()
+
+def InSample(
+        sdi=dt.datetime(2008, 1, 1),
+        edi=dt.datetime(2009, 12, 31),
+        sdo=dt.datetime(2008, 1, 1),
+        edo=dt.datetime(2009, 12, 31),
+        filename='ManualInSample2.eps',
+        insample=True):
+    benchMark = ManualStrategy.BenchMark('JPM', sdo, edo, 100000)
+    sl = StrategyLearner()
+    sl.add_evidence('JPM', sdi, edi, 100000)
+    sl.testPolicy('JPM', sdo, edo, 100000)
+    # print(signal.iloc[0].name)
+    optResSL = sl.portValue()
+
+    ms = ManualStrategy.ManualStrategy()
+    # Manual Strategy
+    ms.setSMA(10, 34)
+    ms.setRSI(13, 19)
+    ms.setSO(20, 6, 1)
+    ms.setBB(16, 1.47924663)
+    ms.setWeights([0.76029473, 0.79502203, 0.93583619, 0.46552834])
+    ms.testPolicy('JPM', sdo, edo, 100000)
+    optResMS = ms.portValue()
+
+    fig, (ax1) = plt.subplots(figsize=(10, 6))
+    ymin, ymax = ax1.get_ylim()
+    benchMark.plot(ax=ax1, color='purple')
+    optResMS.plot(ax=ax1, color='red')
+    optResSL.plot(ax=ax1, color='green')
+    if insample:
+        fig.suptitle(
+            'In sample of Manual Strategy, Strategy Learner and Benchmark')
+    else:
+        fig.suptitle(
+            'Out of sample of Manual Strategy, Strategy Learner and Benchmark')
+    ax1.legend(['Benchmark', 'Manual Strategy',
+               'Strategy Learner'], loc='upper left')
+    ax1.set_xlabel("Date")
+    ax1.set_ylabel("Normalized value")
+    plt.savefig(os.path.dirname(__file__)+"/plots/"+filename, format='eps')
+
+    print("Benchmark: {}".format(ManualStrategy.Metric(benchMark)))
+    print("StrategyLearner: {}".format(ManualStrategy.Metric(optResSL)))
+    print("ManualStrategy: {}".format(ManualStrategy.Metric(optResMS)))
+
+
+def OutOfSample():
+    InSample(sdo=dt.datetime(2010, 1, 1),
+             edo=dt.datetime(2011, 12, 31),
+             filename='ManualOutOfSample2.eps', insample=False)
+
+
+def author():
+    return ('dmiao3')

@@ -4,7 +4,6 @@ import numpy as np
 import pandas as pd
 from util import get_data, plot_data
 import matplotlib.pyplot as plt
-import marketsimcode
 import indicators
 
 
@@ -22,6 +21,8 @@ class ManualStrategy:
         self.SO_window = 14
         self.SO_K = 3
         self.SO_D = 3
+        
+        
 
     def setBB(self, window, m):
         self.BB_window = int(window)
@@ -56,8 +57,12 @@ class ManualStrategy:
         self.start_val = sv
 
         self.initialize()
-        return self.Signal()
-
+        self.Signal()
+        return self.action
+    
+    def author(self):
+            return ('dmiao3')
+        
     def initialize(self):
         dates = pd.date_range(self.start - 80*pd.Timedelta(days=1), self.end)
     # print(dates)
@@ -111,7 +116,7 @@ class ManualStrategy:
             self.prices[fastName] - self.prices[slowName])
         self.prices[signalName] = self.prices[signalName].diff()/2
 
-    def Signal(self):
+    def Signal(self, stock_limit=1000):
         weightSum = np.sum(self.Weights)
         weightedSum = self.prices['SMA-Signal']*self.Weights[0] + \
             self.prices['BB-Signal']*self.Weights[1]+self.prices['RSI-Signal'] * \
@@ -125,7 +130,17 @@ class ManualStrategy:
                 prev = self.signal.iloc[i][0]
             else:
                 self.signal.iloc[i][0] = 0
-        return self.signal
+
+        self.action = pd.DataFrame(data=np.zeros(
+            shape=(self.prices.shape[0], 1)), index=self.prices.index, columns={'action'})
+        prev = 0
+        for i in range(0, len(self.signal)):
+            if self.signal.iloc[i][0] == 1:
+                self.action.iloc[i][0] = stock_limit-prev
+                prev = stock_limit
+            elif self.signal.iloc[i][0] == -1:
+                self.action.iloc[i][0] = -stock_limit-prev
+                prev = -stock_limit
 
     def portValue(self, commission=9.95, impact=0.005, stock_limit=1000):
         stock = 0
@@ -139,13 +154,12 @@ class ManualStrategy:
                 continue
             if self.signal.iloc[i][0] == 1:
                 adjusted_stock_price = stock_price*(1+impact)
-                target = stock_limit
             elif self.signal.iloc[i][0] == -1:
                 adjusted_stock_price = stock_price*(1-impact)
-                target = -stock_limit
-            if target != stock:
-                start_val += -adjusted_stock_price*(target-stock)-commission
-                stock = target
+            if self.action.iloc[i][0]:
+                start_val += -adjusted_stock_price * \
+                    self.action.iloc[i][0]-commission
+                stock = stock + self.action.iloc[i][0]
             res.iloc[i][0] = start_val+stock*stock_price
         res = res/(res.iloc[0])
         return res
@@ -355,3 +369,7 @@ def OutOfSample():
     InSample(sd=dt.datetime(2010, 1, 1),
              ed=dt.datetime(2011, 12, 31),
              filename='ManualOutOfSample.eps', insample=False)
+
+
+def author():
+    return ('dmiao3')
